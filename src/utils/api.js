@@ -96,4 +96,23 @@ Food: ${foodName}`,
 export async function callClaude(messages) {
   return callHuggingFace(messages);
 }
+/**
+ * Get remaining user credits via Netlify Function
+ * (backward compatibility)
+ */
+export async function getUserCredits() {
+  const user = auth.currentUser;
+  if (!user) return null;
+
+  const token = await user.getIdToken();
+
+  const res = await fetch("/.netlify/functions/credits", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) return null;
+  return await res.json();
+}
 
