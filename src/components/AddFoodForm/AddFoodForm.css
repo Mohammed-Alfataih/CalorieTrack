@@ -1,0 +1,228 @@
+/* ─── Card ────────────────────────────────────────────────────────────────── */
+.add-food {
+  background: #1a1a1a;
+  border: 1px solid #222;
+  border-radius: 20px;
+  padding: 24px;
+  animation: fadeUp 0.4s ease 0.22s both;
+}
+
+.add-food__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 18px;
+}
+
+/* ─── Labels ──────────────────────────────────────────────────────────────── */
+.add-food__label {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* ─── Text / Number Inputs ────────────────────────────────────────────────── */
+.add-food__input {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 2px solid #2a2a2a;
+  background: #111;
+  color: #fff;
+  font-size: 15px;
+  font-family: "Outfit", sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.add-food__input:focus {
+  border-color: #ff6b35;
+}
+
+/* ─── Calories row (input + AI button side by side) ───────────────────────── */
+.add-food__calories-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  align-items: flex-end;
+}
+
+.add-food__calories-row .add-food__input-wrap {
+  flex: 1;
+}
+
+.add-food__ai-btn {
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid #ff6b35;
+  background: transparent;
+  color: #ff6b35;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: "Outfit", sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.add-food__ai-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 53, 0.1);
+}
+
+.add-food__ai-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ─── Divider ("or scan your meal") ───────────────────────────────────────── */
+.add-food__divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px;
+}
+
+.add-food__divider-line {
+  flex: 1;
+  height: 1px;
+  background: #2a2a2a;
+}
+
+.add-food__divider-text {
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ─── Photo Upload Zone ───────────────────────────────────────────────────── */
+.add-food__photo-zone {
+  border: 2px dashed #2a2a2a;
+  border-radius: 14px;
+  padding: 22px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.add-food__photo-zone:hover {
+  border-color: #ff6b35;
+  background: rgba(255, 107, 53, 0.03);
+}
+
+.add-food__photo-zone--preview {
+  border: none;
+  padding: 0;
+  background: #111;
+  overflow: hidden;
+}
+
+.add-food__photo-zone--preview:hover {
+  background: #111;
+}
+
+.add-food__photo-icon {
+  font-size: 32px;
+  margin-bottom: 6px;
+}
+
+.add-food__photo-label {
+  color: #aaa;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.add-food__photo-hint {
+  color: #555;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ─── Preview Image + Overlay ─────────────────────────────────────────────── */
+.add-food__preview-wrap {
+  position: relative;
+}
+
+.add-food__preview-img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 14px;
+  display: block;
+}
+
+.add-food__preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 50%);
+  border-radius: 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 12px;
+}
+
+.add-food__preview-overlay span {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ─── AI Scanning Indicator ───────────────────────────────────────────────── */
+.add-food__scanning {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 107, 53, 0.08);
+  border: 1px solid rgba(255, 107, 53, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-food__spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 107, 53, 0.25);
+  border-top-color: #ff6b35;
+  animation: spin 0.7s linear infinite;
+}
+
+.add-food__scanning-text {
+  color: #ff6b35;
+  font-size: 14px;
+}
+
+/* ─── Add Button ──────────────────────────────────────────────────────────── */
+.add-food__btn {
+  margin-top: 20px;
+  width: 100%;
+  padding: 15px;
+  border-radius: 14px;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: "Outfit", sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  /* default: active state */
+  background: linear-gradient(135deg, #ff6b35, #e85a2a);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(255, 107, 53, 0.3);
+}
+
+.add-food__btn:hover:not(:disabled) {
+  box-shadow: 0 6px 22px rgba(255, 107, 53, 0.4);
+}
+
+.add-food__btn:disabled {
+  background: #2a2a2a;
+  color: #555;
+  box-shadow: none;
+  cursor: not-allowed;
+}
