@@ -1,9 +1,9 @@
 import { auth } from "../firebase/config";
 
 /**
- * Call Claude AI via Netlify Function
+ * Call Hugging Face AI via Netlify Function
  */
-export async function callClaude(messages) {
+export async function callHuggingFace(messages) {
   const user = auth.currentUser;
   if (!user) {
     throw new Error("You must be logged in to use AI features");
@@ -11,50 +11,31 @@ export async function callClaude(messages) {
 
   const token = await user.getIdToken();
 
-  const res = await fetch("/.netlify/functions/claude", {
+  const res = await fetch("/.netlify/functions/api", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages,
+      messages, // 👈 your Netlify function expects this
     }),
   });
 
   if (!res.ok) {
     const error = await res.json();
-    throw new Error(error.message || "AI request failed");
+    throw new Error(error.error || "AI request failed");
   }
 
   const data = await res.json();
 
+  // Your function returns Anthropic-like format:
+  // { content: [{ type: "text", text: "..." }] }
   const raw = data.content
     .map(block => (block.type === "text" ? block.text : ""))
     .join("\n");
 
   return raw.replace(/```json|```/g, "").trim();
-}
-
-/**
- * Get remaining credits (optional)
- */
-export async function getUserCredits() {
-  const user = auth.currentUser;
-  if (!user) return null;
-
-  const token = await user.getIdToken();
-
-  const res = await fetch("/.netlify/functions/credits", {
-    headers: {
-      "Authorization": `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) return null;
-  return await res.json();
 }
 
 /**
