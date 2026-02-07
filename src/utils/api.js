@@ -1,14 +1,9 @@
 import { auth } from "../firebase/config";
 
 /**
- * Calls the backend proxy which forwards to Anthropic API.
- * Includes Firebase auth token for user identification and credit tracking.
- *
- * @param {Array} messages — standard Anthropic messages array
- * @returns {Promise<string>} cleaned response text
+ * Call Claude AI via Netlify Function
  */
 export async function callClaude(messages) {
-  // Get current user's auth token
   const user = auth.currentUser;
   if (!user) {
     throw new Error("You must be logged in to use AI features");
@@ -16,10 +11,7 @@ export async function callClaude(messages) {
 
   const token = await user.getIdToken();
 
-  // Call our backend proxy instead of Anthropic directly
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001";
-  
-  const res = await fetch(`${API_URL}/api/claude`, {
+  const res = await fetch("/.netlify/functions/claude", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,62 +26,39 @@ export async function callClaude(messages) {
 
   if (!res.ok) {
     const error = await res.json();
-    
-    // Handle credit limit errors specially
-    if (res.status === 429) {
-      throw new Error(error.message || "Daily AI credit limit reached. Try again tomorrow!");
-    }
-    
-    console.error("API Error:", error);
-    throw new Error(error.error?.message || error.message || "API request failed");
+    throw new Error(error.message || "AI request failed");
   }
 
   const data = await res.json();
-  
-  // Log remaining credits to console
-  const creditsRemaining = res.headers.get('X-Credits-Remaining');
-  if (creditsRemaining !== null) {
-    console.log(`AI Credits remaining today: ${creditsRemaining}`);
-  }
-  
+
   const raw = data.content
-    .map((block) => (block.type === "text" ? block.text : ""))
+    .map(block => (block.type === "text" ? block.text : ""))
     .join("\n");
 
   return raw.replace(/```json|```/g, "").trim();
 }
 
 /**
- * Fetch user's remaining AI credits
- * @returns {Promise<{remaining: number, used: number, limit: number}>}
+ * Get remaining credits (optional)
  */
 export async function getUserCredits() {
   const user = auth.currentUser;
   if (!user) return null;
 
   const token = await user.getIdToken();
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001";
-  
-  const res = await fetch(`${API_URL}/api/credits`, {
-    method: "GET",
+
+  const res = await fetch("/.netlify/functions/credits", {
     headers: {
       "Authorization": `Bearer ${token}`,
     },
   });
 
-  if (!res.ok) {
-    console.error("Failed to fetch credits");
-    return null;
-  }
-
+  if (!res.ok) return null;
   return await res.json();
 }
 
 /**
- * Reads a File object and returns its base64-encoded data (without the data-URL prefix).
- *
- * @param {File} file
- * @returns {Promise<string>} base64 string
+ * Convert file to base64
  */
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -100,11 +69,8 @@ export function fileToBase64(file) {
   });
 }
 
-/* ─── Prompt builders ─────────────────────────────────────────────────────── */
-
 /**
- * Builds the messages array for scanning a food photo.
- * Asks Claude for English name, Arabic name, and calorie estimate.
+ * Prompt for image scan
  */
 export function buildScanPrompt(base64, mimeType) {
   return [
@@ -113,16 +79,16 @@ export function buildScanPrompt(base64, mimeType) {
       content: [
         {
           type: "image",
-          source: { type: "base64", media_type: mimeType || "image/jpeg", data: base64 },
+          source: {
+            type: "base64",
+            media_type: mimeType || "image/jpeg",
+            data: base64,
+          },
         },
         {
           type: "text",
-          text: [
-            "Look at this food photo. Return ONLY valid JSON, nothing else:",
-            '{"foodName":"English name here","foodNameAr":"اسم الطعام بالعربي هنا","calories":number}',
-            "Identify the food, give its name in BOTH English and Arabic,",
-            "and estimate calories for the portion shown.",
-          ].join("\n"),
+          text: `Return ONLY valid JSON:
+{"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}`,
         },
       ],
     },
@@ -130,18 +96,15 @@ export function buildScanPrompt(base64, mimeType) {
 }
 
 /**
- * Builds the messages array for estimating calories from a typed food name.
- * Also normalises the name into both languages.
+ * Prompt for text estimate
  */
 export function buildEstimatePrompt(foodName) {
   return [
     {
       role: "user",
-      content: [
-        `The user typed this food: "${foodName}". Return ONLY valid JSON:`,
-        '{"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}',
-        "Correct / normalize the food name in both languages and estimate calories for a typical serving.",
-      ].join("\n"),
+      content: `Return ONLY valid JSON:
+{"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}
+Food: ${foodName}`,
     },
   ];
 }
