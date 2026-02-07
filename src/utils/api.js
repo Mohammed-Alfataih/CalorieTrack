@@ -89,3 +89,11 @@ Food: ${foodName}`,
     },
   ];
 }
+/**
+ * Backward compatibility
+ * (Claude → Hugging Face)
+ */
+export async function callClaude(messages) {
+  return callHuggingFace(messages);
+}
+
