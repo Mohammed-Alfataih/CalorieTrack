@@ -1,0 +1,8 @@
+{
+  "name": "calorietrack-functions",
+  "version": "1.0.0",
+  "description": "Netlify serverless functions for CalorieTrack",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
