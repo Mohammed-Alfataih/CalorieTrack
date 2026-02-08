@@ -6,7 +6,7 @@ import Login from "./components/Login/Login";
 
 // ── data & utilities ──────────────────────────────────────────────────────────
 import translations from "./constants/translations";
-import { callClaude, fileToBase64, buildScanPrompt, buildEstimatePrompt } from "./utils/api";
+import { callAI, fileToBase64, buildScanPrompt, buildEstimatePrompt } from "./utils/api";
 import { getEntryName } from "./utils/helpers";
 import useUserStorage from "./hooks/useUserStorage"; // User-specific storage
 
@@ -88,7 +88,7 @@ function MainApp() {
 
     try {
       const base64 = await fileToBase64(file);
-      const json = await callClaude(buildScanPrompt(base64, file.type));
+      const json = await callAI(buildScanPrompt(base64, file.type));
       const result = JSON.parse(json);
 
       const en = result.foodName || "";
@@ -112,7 +112,7 @@ function MainApp() {
     setEstimating(true);
 
     try {
-      const json = await callClaude(buildEstimatePrompt(foodName.trim()));
+      const json = await callAI(buildEstimatePrompt(foodName.trim()));
       const result = JSON.parse(json);
 
       const en = result.foodName || foodNameEn || foodName;
@@ -145,7 +145,7 @@ function MainApp() {
     if (!cal) {
       setEstimating(true);
       try {
-        const json = await callClaude(buildEstimatePrompt(foodName.trim()));
+        const json = await callAI(buildEstimatePrompt(foodName.trim()));
         const result = JSON.parse(json);
         en = result.foodName || en;
         ar = result.foodNameAr || ar;
