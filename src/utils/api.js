@@ -9,7 +9,22 @@
  * Call Cloudflare AI Worker
  * @param {Array} messages - array of message objects [{role, content}]
  * @returns {Promise<string>} - text response from AI
+ * 
  */
+// src/utils/api.js
+export async function getUserCredits(userId) {
+  // Example: fetch from your backend (replace with real endpoint)
+  try {
+    const res = await fetch(`/api/credits?uid=${userId}`);
+    if (!res.ok) throw new Error("Failed to fetch credits");
+    return await res.json(); // returns something like { credits: number }
+  } catch (err) {
+    console.error(err);
+    return { credits: 0 };
+  }
+}
+
+
 export async function callAI(messages) {
   const res = await fetch("https://calorie-ai.calorietrack.workers.dev", {
     method: "POST",
