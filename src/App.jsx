@@ -8,7 +8,7 @@ import Login from "./components/Login/Login";
 import translations from "./constants/translations";
 import { callAI, fileToBase64, buildScanPrompt, buildEstimatePrompt } from "./utils/api";
 import { getEntryName } from "./utils/helpers";
-import useUserStorage from "./hooks/useUserStorage"; // User-specific storage
+import useUserStorage from "./hooks/useUserStorage";
 
 // ── components ────────────────────────────────────────────────────────────────
 import Toast from "./components/Toast/Toast";
@@ -22,54 +22,39 @@ import EntryList from "./components/EntryList/EntryList";
 export default function App() {
   const { user } = useAuth();
 
-  // Show login page if not authenticated
-  if (!user) {
-    return <Login />;
-  }
-
+  if (!user) return <Login />;
   return <MainApp />;
 }
 
 function MainApp() {
-  /* ── persisted state (user-specific) ───────────────────────────────────── */
   const [lang, setLang] = useUserStorage("ct_lang", "en");
   const [goal, setGoal] = useUserStorage("ct_goal", null);
   const [entries, setEntries] = useUserStorage("ct_entries", []);
 
-  /* ── form state ────────────────────────────────────────────────────────── */
-  const [foodName, setFoodName] = useState("");      // what the input shows
-  const [foodNameEn, setFoodNameEn] = useState("");  // english slot
-  const [foodNameAr, setFoodNameAr] = useState("");  // arabic slot
+  const [foodName, setFoodName] = useState("");
+  const [foodNameEn, setFoodNameEn] = useState("");
+  const [foodNameAr, setFoodNameAr] = useState("");
   const [calories, setCalories] = useState("");
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  /* ── UI flags ──────────────────────────────────────────────────────────── */
   const [scanning, setScanning] = useState(false);
   const [estimating, setEstimating] = useState(false);
   const [toast, setToast] = useState(null);
 
-  /* ── derived ───────────────────────────────────────────────────────────── */
   const t = translations[lang];
   const totalEaten = entries.reduce((sum, e) => sum + e.calories, 0);
   const remaining = Math.max(goal - totalEaten, 0);
   const pct = goal ? Math.min((totalEaten / goal) * 100, 100) : 0;
   const overGoal = goal !== null && totalEaten > goal;
 
-  /* ── toast helper ──────────────────────────────────────────────────────── */
   const showToast = useCallback((msg) => setToast(msg), []);
 
-  /* ── lang switch: swap the visible input to match the active slot ──────── */
   useEffect(() => {
     if (foodNameEn || foodNameAr) {
       setFoodName(lang === "ar" ? foodNameAr || foodNameEn : foodNameEn || foodNameAr);
     }
   }, [lang, foodNameEn, foodNameAr]);
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     HANDLERS
-     ═══════════════════════════════════════════════════════════════════════════ */
-
-  /** User types in the food-name input → update only the active-lang slot. */
   function handleFoodNameChange(value) {
     setFoodName(value);
     if (lang === "ar") {
@@ -81,11 +66,10 @@ function MainApp() {
     }
   }
 
-  /** User picked a photo → preview it and kick off AI scan. */
+  // ── AI Image Scan ───────────────────────────────
   async function handlePhotoSelect(file) {
     setPreviewUrl(URL.createObjectURL(file));
     setScanning(true);
-
     try {
       const base64 = await fileToBase64(file);
       const json = await callAI(buildScanPrompt(base64, file.type));
@@ -98,19 +82,18 @@ function MainApp() {
       setFoodName(lang === "ar" ? ar : en);
       setCalories(String(result.calories || ""));
       showToast(t.aiScanned(lang === "ar" ? ar : en, result.calories));
-    } catch (error) {
-      console.error("Photo scan error:", error);
-      showToast(error.message || t.aiError);
+    } catch (err) {
+      console.error("Photo scan error:", err);
+      showToast(err.message || t.aiError);
     } finally {
       setScanning(false);
     }
   }
 
-  /** 🤖 AI button next to calories → estimate calories + normalise names. */
+  // ── AI Text Estimate ─────────────────────────────
   async function handleEstimate() {
     if (!foodName.trim()) return;
     setEstimating(true);
-
     try {
       const json = await callAI(buildEstimatePrompt(foodName.trim()));
       const result = JSON.parse(json);
@@ -125,15 +108,15 @@ function MainApp() {
         setCalories(String(result.calories));
         showToast(t.aiEstimated(lang === "ar" ? ar : en, result.calories));
       }
-    } catch (error) {
-      console.error("Estimate error:", error);
-      showToast(error.message || t.aiError);
+    } catch (err) {
+      console.error("Estimate error:", err);
+      showToast(err.message || t.aiError);
     } finally {
       setEstimating(false);
     }
   }
 
-  /** ➕ Add Entry button → if no calories yet, auto-estimate first. */
+  // ── Add Food Entry ─────────────────────────────
   async function handleAdd() {
     if (!foodName.trim()) return;
 
@@ -141,7 +124,6 @@ function MainApp() {
     let ar = foodNameAr || foodName.trim();
     let cal = parseInt(calories, 10);
 
-    /* auto-estimate when calories field is empty */
     if (!cal) {
       setEstimating(true);
       try {
@@ -150,9 +132,9 @@ function MainApp() {
         en = result.foodName || en;
         ar = result.foodNameAr || ar;
         cal = result.calories || 0;
-      } catch (error) {
-        console.error("Auto-estimate error:", error);
-        showToast(error.message || t.aiError);
+      } catch (err) {
+        console.error("Auto-estimate error:", err);
+        showToast(err.message || t.aiError);
         cal = 0;
       } finally {
         setEstimating(false);
@@ -175,23 +157,19 @@ function MainApp() {
     resetForm();
   }
 
-  /** Delete a single entry by id. */
   function handleDelete(id) {
     setEntries((prev) => prev.filter((e) => e.id !== id));
     showToast(t.deleted);
   }
 
-  /** Reset goal + entries (triggered by dropdown). */
   function handleReset() {
     if (window.confirm("Reset all data? This cannot be undone.")) {
       setGoal(null);
       setEntries([]);
-      // Only clear current user's data (keys are already prefixed with user ID)
       showToast("Data reset successfully");
     }
   }
 
-  /* ── private helpers ─────────────────────────────────────────────────── */
   function resetForm() {
     setFoodName("");
     setFoodNameEn("");
@@ -200,11 +178,6 @@ function MainApp() {
     setPreviewUrl(null);
   }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════════════════════════════════ */
-
-  /* first-launch gate */
   if (goal === null) {
     return (
       <GoalModal
@@ -219,9 +192,7 @@ function MainApp() {
 
   return (
     <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ minHeight: "100vh" }}>
-      {/* toast notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-
       <div style={{ maxWidth: 520, margin: "0 auto", padding: "28px 18px 60px" }}>
         <Header lang={lang} onLangChange={setLang} onReset={handleReset} />
 
