@@ -1,13 +1,24 @@
+import { auth } from "../firebase/config";
+
 /**
  * Call Cloudflare AI Worker
  * Supports text and image prompts
  */
 export async function callAI(messages) {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("You must be logged in to use AI features");
+  }
+
+  // Get Firebase ID token
+  const token = await user.getIdToken();
+
   // Send request directly to your Cloudflare Worker
   const res = await fetch("https://calorie-ai.calorietrack.workers.dev", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`, // optional: include if your worker requires auth
     },
     body: JSON.stringify({ messages }),
   });
@@ -70,4 +81,23 @@ export function buildEstimatePrompt(foodName) {
 Food: ${foodName}`,
     },
   ];
+}
+
+/**
+ * Get remaining user credits (if needed)
+ */
+export async function getUserCredits() {
+  const user = auth.currentUser;
+  if (!user) return null;
+
+  const token = await user.getIdToken();
+
+  const res = await fetch("/.netlify/functions/credits", {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) return null;
+  return await res.json();
 }
