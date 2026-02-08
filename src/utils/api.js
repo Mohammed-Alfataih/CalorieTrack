@@ -1,24 +1,20 @@
-import { auth } from "../firebase/config";
-
 /**
+ * src/utils/api.js
+ * 
  * Call Cloudflare AI Worker
  * Supports text and image prompts
  */
+
+/**
+ * Call Cloudflare AI Worker
+ * @param {Array} messages - array of message objects [{role, content}]
+ * @returns {Promise<string>} - text response from AI
+ */
 export async function callAI(messages) {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("You must be logged in to use AI features");
-  }
-
-  // Get Firebase ID token
-  const token = await user.getIdToken();
-
-  // Send request directly to your Cloudflare Worker
   const res = await fetch("https://calorie-ai.calorietrack.workers.dev", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`, // optional: include if your worker requires auth
     },
     body: JSON.stringify({ messages }),
   });
@@ -28,15 +24,16 @@ export async function callAI(messages) {
     throw new Error(err.error || "AI request failed");
   }
 
-  // Parse response
   const data = await res.json();
 
-  // Clean code blocks if present
+  // Remove code blocks if present
   return data.text.replace(/```json|```/g, "").trim();
 }
 
 /**
- * Convert file to base64 for image prompts
+ * Convert a file to base64 (for image prompts)
+ * @param {File} file - image file
+ * @returns {Promise<string>} - base64 string
  */
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -48,7 +45,10 @@ export function fileToBase64(file) {
 }
 
 /**
- * Build prompt for image scan
+ * Build prompt for scanning an image for calories
+ * @param {string} base64 - base64 image
+ * @param {string} mimeType - optional MIME type
+ * @returns {Array} - messages array for callAI
  */
 export function buildScanPrompt(base64, mimeType = "image/jpeg") {
   return [
@@ -71,6 +71,8 @@ export function buildScanPrompt(base64, mimeType = "image/jpeg") {
 
 /**
  * Build prompt for text-only calorie estimate
+ * @param {string} foodName - name of the food
+ * @returns {Array} - messages array for callAI
  */
 export function buildEstimatePrompt(foodName) {
   return [
@@ -81,23 +83,4 @@ export function buildEstimatePrompt(foodName) {
 Food: ${foodName}`,
     },
   ];
-}
-
-/**
- * Get remaining user credits (if needed)
- */
-export async function getUserCredits() {
-  const user = auth.currentUser;
-  if (!user) return null;
-
-  const token = await user.getIdToken();
-
-  const res = await fetch("/.netlify/functions/credits", {
-    headers: {
-      "Authorization": `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) return null;
-  return await res.json();
 }
