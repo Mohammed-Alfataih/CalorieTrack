@@ -1,64 +1,31 @@
-import { auth } from "../firebase/config";
-
 /**
- * Call Claude AI via Netlify Function
+ * Call Cloudflare AI Worker
+ * Supports text and image prompts
  */
-export async function callClaude(messages) {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("You must be logged in to use AI features");
-  }
-
-  const token = await user.getIdToken();
-
-  const res = await fetch("/.netlify/functions/claude", {
+export async function callAI(messages) {
+  // Send request directly to your Cloudflare Worker
+  const res = await fetch("https://calorie-ai.calorietrack.workers.dev", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages,
-    }),
+    body: JSON.stringify({ messages }),
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || "AI request failed");
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "AI request failed");
   }
 
+  // Parse response
   const data = await res.json();
 
-  const raw = data.content
-    .map(block => (block.type === "text" ? block.text : ""))
-    .join("\n");
-
-  return raw.replace(/```json|```/g, "").trim();
+  // Clean code blocks if present
+  return data.text.replace(/```json|```/g, "").trim();
 }
 
 /**
- * Get remaining credits (optional)
- */
-export async function getUserCredits() {
-  const user = auth.currentUser;
-  if (!user) return null;
-
-  const token = await user.getIdToken();
-
-  const res = await fetch("/.netlify/functions/credits", {
-    headers: {
-      "Authorization": `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) return null;
-  return await res.json();
-}
-
-/**
- * Convert file to base64
+ * Convert file to base64 for image prompts
  */
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -70,23 +37,19 @@ export function fileToBase64(file) {
 }
 
 /**
- * Prompt for image scan
+ * Build prompt for image scan
  */
-export function buildScanPrompt(base64, mimeType) {
+export function buildScanPrompt(base64, mimeType = "image/jpeg") {
   return [
     {
       role: "user",
       content: [
         {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mimeType || "image/jpeg",
-            data: base64,
-          },
+          type: "input_image",
+          image_base64: base64,
         },
         {
-          type: "text",
+          type: "input_text",
           text: `Return ONLY valid JSON:
 {"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}`,
         },
@@ -96,7 +59,7 @@ export function buildScanPrompt(base64, mimeType) {
 }
 
 /**
- * Prompt for text estimate
+ * Build prompt for text-only calorie estimate
  */
 export function buildEstimatePrompt(foodName) {
   return [
