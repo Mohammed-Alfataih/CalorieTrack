@@ -1,11 +1,11 @@
 /**
- * Netlify Serverless Function - Claude API Proxy with Credit Tracking
+ * Netlify Serverless Function - Cloudflare AI Proxy with Credit Tracking
  * 
  * Path: /.netlify/functions/claude
  * 
  * Environment Variables needed in Netlify:
- * - ANTHROPIC_API_KEY
  * - FIREBASE_PROJECT_ID (set to: caloriestrack)
+ * - CLOUDFLARE_WORKER_URL (set to: https://calorie-ai.calorietrack.workers.dev)
  */
 
 const admin = require('firebase-admin');
@@ -18,7 +18,6 @@ if (!admin.apps.length) {
 }
 
 // In-memory credit storage (shared across function invocations)
-// Note: In production, use Redis or a database for persistent storage
 const userCredits = new Map();
 const DAILY_CREDIT_LIMIT = 1000;
 
@@ -123,18 +122,18 @@ exports.handler = async (event, context) => {
       };
     }
 
-    console.log(`✅ ALLOWED: Making API call...`);
+    console.log(`✅ ALLOWED: Making API call to Cloudflare Worker...`);
 
     // Parse request body
     const requestBody = JSON.parse(event.body);
 
-    // Call Anthropic API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Call Cloudflare Worker instead of Anthropic API
+    const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
+    
+    const response = await fetch(cloudflareWorkerUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(requestBody),
     });
@@ -142,7 +141,7 @@ exports.handler = async (event, context) => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Anthropic API error:', data);
+      console.error('Cloudflare Worker error:', data);
       return {
         statusCode: response.status,
         headers,
