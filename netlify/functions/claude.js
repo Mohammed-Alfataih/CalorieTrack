@@ -129,7 +129,7 @@ exports.handler = async (event, context) => {
     const requestBody = JSON.parse(event.body);
 
     // Call Anthropic API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://calorie-ai.calorietrack.workers.dev', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
