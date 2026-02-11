@@ -1,40 +1,35 @@
 import { getAuth } from "firebase/auth";
-/**
- * src/utils/api.js
- * 
- * Call Cloudflare AI Worker
- * Supports text and image prompts
- */
 
 /**
- * Call Cloudflare AI Worker
- * @param {Array} messages - array of message objects [{role, content}]
- * @returns {Promise<string>} - text response from AI
- * 
+ * Get user credits from backend
  */
-// src/utils/api.js
-export async function getUserCredits(userId) {
-  // Example: fetch from your backend (replace with real endpoint)
-  try {
-    const res = await fetch(`/api/credits?uid=${userId}`);
-    if (!res.ok) throw new Error("Failed to fetch credits");
-    return await res.json(); // returns something like { credits: number }
-  } catch (err) {
-    console.error(err);
-    return { credits: 0 };
-  }
-}
-
-
-
-
-export async function callAI(messages) {
+export async function getUserCredits() {
   const auth = getAuth();
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error("User not logged in");
+    console.error("User not logged in");
+    return { credits: 0, remaining: 0 };
   }
+
+  try {
+    const res = await fetch(`/api/credits?uid=${user.uid}`);
+    if (!res.ok) throw new Error("Failed to fetch credits");
+    return await res.json(); // { credits: number, remaining: number }
+  } catch (err) {
+    console.error(err);
+    return { credits: 0, remaining: 0 };
+  }
+}
+
+/**
+ * Call Cloudflare AI Worker via Netlify function
+ */
+export async function callAI(messages) {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  if (!user) throw new Error("User not logged in");
 
   const token = await user.getIdToken();
 
@@ -53,14 +48,13 @@ export async function callAI(messages) {
   }
 
   const data = await res.json();
+  if (!data.text) throw new Error("AI response missing text");
+
   return data.text.replace(/```json|```/g, "").trim();
 }
 
-
 /**
- * Convert a file to base64 (for image prompts)
- * @param {File} file - image file
- * @returns {Promise<string>} - base64 string
+ * Convert file to base64
  */
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -72,20 +66,14 @@ export function fileToBase64(file) {
 }
 
 /**
- * Build prompt for scanning an image for calories
- * @param {string} base64 - base64 image
- * @param {string} mimeType - optional MIME type
- * @returns {Array} - messages array for callAI
+ * Build scan prompt for image
  */
-export function buildScanPrompt(base64, mimeType = "image/jpeg") {
+export function buildScanPrompt(base64) {
   return [
     {
       role: "user",
       content: [
-        {
-          type: "input_image",
-          image_base64: base64,
-        },
+        { type: "input_image", image_base64: base64 },
         {
           type: "input_text",
           text: `Return ONLY valid JSON:
@@ -97,9 +85,7 @@ export function buildScanPrompt(base64, mimeType = "image/jpeg") {
 }
 
 /**
- * Build prompt for text-only calorie estimate
- * @param {string} foodName - name of the food
- * @returns {Array} - messages array for callAI
+ * Build estimate prompt for text
  */
 export function buildEstimatePrompt(foodName) {
   return [
