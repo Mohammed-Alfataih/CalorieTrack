@@ -1,3 +1,4 @@
+import { getAuth } from "firebase/auth";
 /**
  * src/utils/api.js
  * 
@@ -25,11 +26,23 @@ export async function getUserCredits(userId) {
 }
 
 
+
+
 export async function callAI(messages) {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User not logged in");
+  }
+
+  const token = await user.getIdToken();
+
   const res = await fetch("/.netlify/functions/cloudflare", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
     },
     body: JSON.stringify({ messages }),
   });
@@ -40,10 +53,9 @@ export async function callAI(messages) {
   }
 
   const data = await res.json();
-
-  // Remove code blocks if present
   return data.text.replace(/```json|```/g, "").trim();
 }
+
 
 /**
  * Convert a file to base64 (for image prompts)
