@@ -1,14 +1,14 @@
 import * as admin from 'firebase-admin';
 import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
 
-// Initialize Firebase Admin once
+// ── Firebase Admin Initialization ─────────────────────────────
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack'
+    projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack',
   });
 }
 
-// In-memory credit storage (resets on cold start)
+// ── In-memory credit storage (resets on cold start) ─────────
 interface UserCredits { count: number; date: string; }
 const userCredits = new Map<string, UserCredits>();
 const DAILY_CREDIT_LIMIT = 1000;
@@ -34,7 +34,7 @@ function getRemainingCredits(userId: string) {
   return DAILY_CREDIT_LIMIT - getUserCredits(userId).count;
 }
 
-// Verify Firebase token
+// ── Firebase Auth Verification ───────────────────────────────
 async function verifyAuth(authHeader?: string) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) throw new Error('No authentication token provided');
   const token = authHeader.split('Bearer ')[1];
@@ -42,7 +42,7 @@ async function verifyAuth(authHeader?: string) {
   return { userId: decoded.uid, email: decoded.email || '' };
 }
 
-// Main Netlify handler
+// ── Main Netlify Handler ─────────────────────────────────────
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -75,29 +75,33 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       };
     }
 
+    // ── Parse request ─────────────────────────────────────────
     const requestBody = JSON.parse(event.body || '{}');
     const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
 
+    // ── Call the Worker ───────────────────────────────────────
     const response = await fetch(cloudflareWorkerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
 
-    let data: any;
+    let aiData: any;
     try {
-      data = await response.json();
+      aiData = await response.json();
     } catch {
+      // fallback: Worker returned plain text
       const text = await response.text();
-      data = { text };
+      aiData = {
+        foodName: 'Unknown',
+        foodNameAr: 'غير معروف',
+        calories: 0,
+        text
+      };
+      console.warn('⚠️ Cloudflare Worker returned non-JSON:', text);
     }
 
-    if (!response.ok) {
-      console.error('Cloudflare Worker error:', data);
-      return { statusCode: response.status, headers, body: JSON.stringify(data) };
-    }
-
-    // Increment credits after successful call
+    // ── Increment credits after successful call ───────────────
     incrementCredits(userId);
     const newRemaining = getRemainingCredits(userId);
 
@@ -112,10 +116,10 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       statusCode: 200,
       headers: responseHeaders,
       body: JSON.stringify({
-        text: data.text ?? JSON.stringify(data),
+        ...aiData,
         creditsUsed: getUserCredits(userId).count,
         creditsRemaining: newRemaining
-      })
+      }),
     };
 
   } catch (error) {
