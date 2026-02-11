@@ -26,7 +26,7 @@ export async function getUserCredits(userId) {
 
 
 export async function callAI(messages) {
-  const res = await fetch("https://calorie-ai.calorietrack.workers.dev", {
+  const res = await fetch("/.netlify/functions/cloudflare", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
