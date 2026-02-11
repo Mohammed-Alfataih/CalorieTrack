@@ -21,9 +21,15 @@ export async function getUserCredits() {
       body: JSON.stringify({ messages: [] }), // empty messages just to fetch credits
     });
 
-    if (!res.ok) throw new Error("Failed to fetch credits");
+    // ✅ Safe JSON parsing
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.text();
+      data = { text };
+    }
 
-    const data = await res.json();
     return {
       credits: data.creditsUsed ?? 0,
       remaining: data.creditsRemaining ?? 0,
@@ -54,15 +60,20 @@ export async function callAI(messages) {
     body: JSON.stringify({ messages }),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "AI request failed");
+  // ✅ Safe JSON parsing: try JSON, fallback to text
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    const text = await res.text();
+    data = { text };
   }
 
-  const data = await res.json();
-  if (!data.text) throw new Error("AI response missing text");
+  if (!res.ok) {
+    throw new Error(data.error || "AI request failed");
+  }
 
-  return data.text.replace(/```json|```/g, "").trim();
+  return (data.text || "").replace(/```json|```/g, "").trim();
 }
 
 /**
