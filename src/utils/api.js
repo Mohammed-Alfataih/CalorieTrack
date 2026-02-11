@@ -1,21 +1,33 @@
 import { getAuth } from "firebase/auth";
 
 /**
- * Get user credits from backend
+ * Get user credits from Cloudflare function
  */
 export async function getUserCredits() {
   const auth = getAuth();
   const user = auth.currentUser;
 
-  if (!user) {
-    console.error("User not logged in");
-    return { credits: 0, remaining: 0 };
-  }
+  if (!user) return { credits: 0, remaining: 0 };
+
+  const token = await user.getIdToken();
 
   try {
-    const res = await fetch(`/api/credits?uid=${user.uid}`);
+    const res = await fetch("/.netlify/functions/cloudflare", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ messages: [] }), // empty messages just to fetch credits
+    });
+
     if (!res.ok) throw new Error("Failed to fetch credits");
-    return await res.json(); // { credits: number, remaining: number }
+
+    const data = await res.json();
+    return {
+      credits: data.creditsUsed ?? 0,
+      remaining: data.creditsRemaining ?? 0,
+    };
   } catch (err) {
     console.error(err);
     return { credits: 0, remaining: 0 };

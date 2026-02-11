@@ -1,14 +1,14 @@
 import * as admin from 'firebase-admin';
 import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin once
 if (!admin.apps.length) {
   admin.initializeApp({
     projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack'
   });
 }
 
-// In-memory credit storage (reset on cold starts)
+// In-memory credit storage (resets on cold start)
 interface UserCredits { count: number; date: string; }
 const userCredits = new Map<string, UserCredits>();
 const DAILY_CREDIT_LIMIT = 1000;
@@ -20,17 +20,17 @@ function getUserCredits(userId: string): UserCredits {
   return userCredits.get(key)!;
 }
 
-function hasCreditsRemaining(userId: string): boolean {
+function hasCreditsRemaining(userId: string) {
   return getUserCredits(userId).count < DAILY_CREDIT_LIMIT;
 }
 
-function incrementCredits(userId: string): void {
+function incrementCredits(userId: string) {
   const credits = getUserCredits(userId);
   credits.count += 1;
   userCredits.set(`${userId}:${credits.date}`, credits);
 }
 
-function getRemainingCredits(userId: string): number {
+function getRemainingCredits(userId: string) {
   return DAILY_CREDIT_LIMIT - getUserCredits(userId).count;
 }
 
@@ -42,7 +42,7 @@ async function verifyAuth(authHeader?: string) {
   return { userId: decoded.uid, email: decoded.email || '' };
 }
 
-// Main handler
+// Main Netlify handler
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -97,7 +97,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       return { statusCode: response.status, headers, body: JSON.stringify(data) };
     }
 
-    // Increment credits
+    // Increment credits after successful call
     incrementCredits(userId);
     const newRemaining = getRemainingCredits(userId);
 
