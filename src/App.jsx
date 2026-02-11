@@ -72,8 +72,14 @@ function MainApp() {
     setScanning(true);
     try {
       const base64 = await fileToBase64(file);
-      const json = await callAI(buildScanPrompt(base64, file.type));
-      const result = JSON.parse(json);
+      const text = await callAI(buildScanPrompt(base64, file.type));
+
+      let result = {};
+      try {
+        result = JSON.parse(text);
+      } catch {
+        console.warn("Photo scan returned non-JSON:", text);
+      }
 
       const en = result.foodName || "";
       const ar = result.foodNameAr || en;
@@ -95,8 +101,14 @@ function MainApp() {
     if (!foodName.trim()) return;
     setEstimating(true);
     try {
-      const json = await callAI(buildEstimatePrompt(foodName.trim()));
-      const result = JSON.parse(json);
+      const text = await callAI(buildEstimatePrompt(foodName.trim()));
+
+      let result = {};
+      try {
+        result = JSON.parse(text);
+      } catch {
+        console.warn("Estimate returned non-JSON:", text);
+      }
 
       const en = result.foodName || foodNameEn || foodName;
       const ar = result.foodNameAr || foodNameAr || foodName;
@@ -127,8 +139,15 @@ function MainApp() {
     if (!cal) {
       setEstimating(true);
       try {
-        const json = await callAI(buildEstimatePrompt(foodName.trim()));
-        const result = JSON.parse(json);
+        const text = await callAI(buildEstimatePrompt(foodName.trim()));
+
+        let result = {};
+        try {
+          result = JSON.parse(text);
+        } catch {
+          console.warn("Auto-estimate returned non-JSON:", text);
+        }
+
         en = result.foodName || en;
         ar = result.foodNameAr || ar;
         cal = result.calories || 0;
