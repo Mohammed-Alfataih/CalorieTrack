@@ -21,7 +21,6 @@ import EntryList from "./components/EntryList/EntryList";
 
 export default function App() {
   const { user } = useAuth();
-
   if (!user) return <Login />;
   return <MainApp />;
 }
@@ -79,6 +78,7 @@ function MainApp() {
         result = JSON.parse(text);
       } catch {
         console.warn("Photo scan returned non-JSON:", text);
+        result = { foodName: "", foodNameAr: "", calories: 0, text };
       }
 
       const en = result.foodName || "";
@@ -108,6 +108,7 @@ function MainApp() {
         result = JSON.parse(text);
       } catch {
         console.warn("Estimate returned non-JSON:", text);
+        result = { foodName: foodName, foodNameAr: foodName, calories: 0, text };
       }
 
       const en = result.foodName || foodNameEn || foodName;
@@ -146,6 +147,7 @@ function MainApp() {
           result = JSON.parse(text);
         } catch {
           console.warn("Auto-estimate returned non-JSON:", text);
+          result = { foodName: en, foodNameAr: ar, calories: 0, text };
         }
 
         en = result.foodName || en;
