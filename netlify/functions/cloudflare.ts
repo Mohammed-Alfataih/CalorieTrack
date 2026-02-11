@@ -1,14 +1,12 @@
 import * as admin from 'firebase-admin';
 import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
 
-// ── Firebase Admin Initialization ─────────────────────────────
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack',
+    projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack'
   });
 }
 
-// ── In-memory credit storage (resets on cold start) ─────────
 interface UserCredits { count: number; date: string; }
 const userCredits = new Map<string, UserCredits>();
 const DAILY_CREDIT_LIMIT = 1000;
@@ -34,7 +32,6 @@ function getRemainingCredits(userId: string) {
   return DAILY_CREDIT_LIMIT - getUserCredits(userId).count;
 }
 
-// ── Firebase Auth Verification ───────────────────────────────
 async function verifyAuth(authHeader?: string) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) throw new Error('No authentication token provided');
   const token = authHeader.split('Bearer ')[1];
@@ -42,7 +39,6 @@ async function verifyAuth(authHeader?: string) {
   return { userId: decoded.uid, email: decoded.email || '' };
 }
 
-// ── Main Netlify Handler ─────────────────────────────────────
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -55,75 +51,57 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
   try {
     const { userId, email } = await verifyAuth(event.headers.authorization);
-    console.log(`✅ Authenticated: ${email} (${userId})`);
-
     const currentCredits = getUserCredits(userId);
-    const remaining = getRemainingCredits(userId);
-    console.log(`🔍 Credits: ${currentCredits.count}/${DAILY_CREDIT_LIMIT}, Remaining: ${remaining}`);
 
     if (!hasCreditsRemaining(userId)) {
       return {
         statusCode: 429,
         headers,
-        body: JSON.stringify({
-          error: 'Daily AI credit limit reached',
-          limit: DAILY_CREDIT_LIMIT,
-          used: currentCredits.count,
-          remaining: 0,
-          message: `You've used all ${DAILY_CREDIT_LIMIT} daily AI credits. Credits reset at midnight.`
-        })
+        body: JSON.stringify({ error: 'Daily AI credit limit reached' })
       };
     }
 
-    // ── Parse request ─────────────────────────────────────────
     const requestBody = JSON.parse(event.body || '{}');
     const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
 
-    // ── Call the Worker ───────────────────────────────────────
     const response = await fetch(cloudflareWorkerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
 
-    let aiData: any;
+    let data: any;
+
     try {
-      aiData = await response.json();
+      data = await response.json();
     } catch {
-      // fallback: Worker returned plain text
+      // ✅ ALWAYS return JSON, even if the worker returned plain text
       const text = await response.text();
-      aiData = {
-        foodName: 'Unknown',
-        foodNameAr: 'غير معروف',
-        calories: 0,
-        text
-      };
-      console.warn('⚠️ Cloudflare Worker returned non-JSON:', text);
+      data = { text };
     }
 
-    // ── Increment credits after successful call ───────────────
     incrementCredits(userId);
     const newRemaining = getRemainingCredits(userId);
 
-    const responseHeaders = {
-      ...headers,
-      'X-Credits-Remaining': String(newRemaining),
-      'X-Credits-Used': String(getUserCredits(userId).count),
-      'X-Credits-Limit': String(DAILY_CREDIT_LIMIT),
-    };
-
     return {
       statusCode: 200,
-      headers: responseHeaders,
+      headers: {
+        ...headers,
+        'X-Credits-Remaining': String(newRemaining),
+        'X-Credits-Used': String(getUserCredits(userId).count),
+        'X-Credits-Limit': String(DAILY_CREDIT_LIMIT),
+      },
       body: JSON.stringify({
-        ...aiData,
+        foodName: data.foodName || requestBody.foodName || "Unknown",
+        foodNameAr: data.foodNameAr || requestBody.foodName || "Unknown",
+        calories: data.calories || 0,
+        text: data.text || "No additional info",
         creditsUsed: getUserCredits(userId).count,
         creditsRemaining: newRemaining
-      }),
+      })
     };
 
   } catch (error) {
-    console.error('Function error:', error);
     return {
       statusCode: (error as Error).message.includes('authentication') ? 401 : 500,
       headers,
