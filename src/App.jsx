@@ -65,32 +65,54 @@ function MainApp() {
     }
   }
 
+  // Safe JSON parser
+  function safeParse(text, contextLabel) {
+    if (!text || typeof text !== "string") {
+      console.warn(`${contextLabel} returned empty response`);
+      return null;
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      console.warn(`${contextLabel} returned non-JSON:`, text);
+      return null;
+    }
+  }
+
   // ── AI Image Scan ───────────────────────────────
   async function handlePhotoSelect(file) {
     setPreviewUrl(URL.createObjectURL(file));
     setScanning(true);
+
     try {
       const base64 = await fileToBase64(file);
       const text = await callAI(buildScanPrompt(base64, file.type));
 
-      let result = {};
-      try {
-        result = JSON.parse(text);
-      } catch {
-        console.warn("Photo scan returned non-JSON:", text);
-        result = { foodName: "", foodNameAr: "", calories: 0, text };
+      const result = safeParse(text, "Photo scan");
+
+      if (!result) {
+        showToast("AI returned an invalid response. Please try again.");
+        return;
       }
 
       const en = result.foodName || "";
       const ar = result.foodNameAr || en;
+
       setFoodNameEn(en);
       setFoodNameAr(ar);
       setFoodName(lang === "ar" ? ar : en);
-      setCalories(String(result.calories || ""));
-      showToast(t.aiScanned(lang === "ar" ? ar : en, result.calories));
+      setCalories(result.calories ? String(result.calories) : "");
+
+      if (result.calories) {
+        showToast(t.aiScanned(lang === "ar" ? ar : en, result.calories));
+      } else {
+        showToast("Could not detect calories. Please try again.");
+      }
+
     } catch (err) {
       console.error("Photo scan error:", err);
-      showToast(err.message || t.aiError);
+      showToast(t.aiError);
     } finally {
       setScanning(false);
     }
@@ -99,20 +121,21 @@ function MainApp() {
   // ── AI Text Estimate ─────────────────────────────
   async function handleEstimate() {
     if (!foodName.trim()) return;
+
     setEstimating(true);
+
     try {
       const text = await callAI(buildEstimatePrompt(foodName.trim()));
+      const result = safeParse(text, "Estimate");
 
-      let result = {};
-      try {
-        result = JSON.parse(text);
-      } catch {
-        console.warn("Estimate returned non-JSON:", text);
-        result = { foodName: foodName, foodNameAr: foodName, calories: 0, text };
+      if (!result) {
+        showToast("AI returned an invalid response. Please try again.");
+        return;
       }
 
       const en = result.foodName || foodNameEn || foodName;
       const ar = result.foodNameAr || foodNameAr || foodName;
+
       setFoodNameEn(en);
       setFoodNameAr(ar);
       setFoodName(lang === "ar" ? ar : en);
@@ -120,10 +143,13 @@ function MainApp() {
       if (result.calories) {
         setCalories(String(result.calories));
         showToast(t.aiEstimated(lang === "ar" ? ar : en, result.calories));
+      } else {
+        showToast("Could not estimate calories. Please try again.");
       }
+
     } catch (err) {
       console.error("Estimate error:", err);
-      showToast(err.message || t.aiError);
+      showToast(t.aiError);
     } finally {
       setEstimating(false);
     }
@@ -141,21 +167,16 @@ function MainApp() {
       setEstimating(true);
       try {
         const text = await callAI(buildEstimatePrompt(foodName.trim()));
+        const result = safeParse(text, "Auto-estimate");
 
-        let result = {};
-        try {
-          result = JSON.parse(text);
-        } catch {
-          console.warn("Auto-estimate returned non-JSON:", text);
-          result = { foodName: en, foodNameAr: ar, calories: 0, text };
+        if (result) {
+          en = result.foodName || en;
+          ar = result.foodNameAr || ar;
+          cal = result.calories || 0;
         }
-
-        en = result.foodName || en;
-        ar = result.foodNameAr || ar;
-        cal = result.calories || 0;
       } catch (err) {
         console.error("Auto-estimate error:", err);
-        showToast(err.message || t.aiError);
+        showToast(t.aiError);
         cal = 0;
       } finally {
         setEstimating(false);
