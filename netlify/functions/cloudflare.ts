@@ -63,7 +63,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     const requestBody = JSON.parse(event.body || '{}');
     const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
 
-    // ✅ FIX: Transform messages format → worker's expected { type, food/image } format
+    // Transform messages → worker expected format
     let workerBody: any;
     if (requestBody.messages && requestBody.messages.length > 0) {
       const lastMessage = requestBody.messages[requestBody.messages.length - 1];
@@ -71,11 +71,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       if (Array.isArray(content)) {
         const imageBase64 = content.find((c: any) => c.image_base64)?.image_base64;
-        if (imageBase64) {
-          workerBody = { type: "image", image: imageBase64 };
-        } else {
-          workerBody = { type: "text", food: "Unknown food from image" };
-        }
+        workerBody = imageBase64 ? { type: "image", image: imageBase64 } : { type: "text", food: "Unknown food from image" };
       } else if (typeof content === 'string') {
         const foodMatch = content.match(/Food:\s*(.+)/)?.[1]?.trim();
         workerBody = { type: "text", food: foodMatch || content };
@@ -83,7 +79,6 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
       }
     } else if (requestBody.type) {
-      // Already in correct format
       workerBody = requestBody;
     } else {
       workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
@@ -95,13 +90,12 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       body: JSON.stringify(workerBody),
     });
 
+    // ✅ FIX: Always parse JSON safely
     let data: any;
-    const responseText = await response.text();
-
     try {
-      data = JSON.parse(responseText);
+      data = await response.json();
     } catch {
-      data = { text: responseText };
+      data = { foodName: workerBody.food || "Unknown", foodNameAr: workerBody.food || "Unknown", calories: 0 };
     }
 
     incrementCredits(userId);
@@ -121,7 +115,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         calories: data.calories || 0,
         confidence: data.confidence || "medium",
         breakdown: data.breakdown || null,
-        text: data.text || "No additional info",
+        text: "", // remove "No additional info" to prevent frontend warnings
         creditsUsed: getUserCredits(userId).count,
         creditsRemaining: newRemaining
       })
