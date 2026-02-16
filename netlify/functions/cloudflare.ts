@@ -51,7 +51,6 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
   try {
     const { userId, email } = await verifyAuth(event.headers.authorization);
-    const currentCredits = getUserCredits(userId);
 
     if (!hasCreditsRemaining(userId)) {
       return {
@@ -64,20 +63,45 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     const requestBody = JSON.parse(event.body || '{}');
     const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
 
+    // ✅ FIX: Transform messages format → worker's expected { type, food/image } format
+    let workerBody: any;
+    if (requestBody.messages && requestBody.messages.length > 0) {
+      const lastMessage = requestBody.messages[requestBody.messages.length - 1];
+      const content = lastMessage?.content;
+
+      if (Array.isArray(content)) {
+        const imageBase64 = content.find((c: any) => c.image_base64)?.image_base64;
+        if (imageBase64) {
+          workerBody = { type: "image", image: imageBase64 };
+        } else {
+          workerBody = { type: "text", food: "Unknown food from image" };
+        }
+      } else if (typeof content === 'string') {
+        const foodMatch = content.match(/Food:\s*(.+)/)?.[1]?.trim();
+        workerBody = { type: "text", food: foodMatch || content };
+      } else {
+        workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
+      }
+    } else if (requestBody.type) {
+      // Already in correct format
+      workerBody = requestBody;
+    } else {
+      workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
+    }
+
     const response = await fetch(cloudflareWorkerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(workerBody),
     });
 
     let data: any;
+    const responseText = await response.text();
 
     try {
-      data = await response.json();
+      data = JSON.parse(responseText);
     } catch {
-      // ✅ ALWAYS return JSON, even if the worker returned plain text
-      const text = await response.text();
-      data = { text };
+      data = { text: responseText };
     }
 
     incrementCredits(userId);
@@ -92,9 +116,11 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         'X-Credits-Limit': String(DAILY_CREDIT_LIMIT),
       },
       body: JSON.stringify({
-        foodName: data.foodName || requestBody.foodName || "Unknown",
-        foodNameAr: data.foodNameAr || requestBody.foodName || "Unknown",
+        foodName: data.foodName || workerBody.food || "Unknown",
+        foodNameAr: data.foodNameAr || workerBody.food || "Unknown",
         calories: data.calories || 0,
+        confidence: data.confidence || "medium",
+        breakdown: data.breakdown || null,
         text: data.text || "No additional info",
         creditsUsed: getUserCredits(userId).count,
         creditsRemaining: newRemaining
