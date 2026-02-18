@@ -73,7 +73,8 @@ export async function callAI(messages) {
     throw new Error(data.error || "AI request failed");
   }
 
-  return (data.text || "").replace(/```json|```/g, "").trim();
+  return JSON.stringify(data);
+
 }
 
 /**
