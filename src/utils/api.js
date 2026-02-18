@@ -73,7 +73,9 @@ export async function callAI(messages) {
     throw new Error(data.error || "AI request failed");
   }
 
-  return JSON.stringify(data);
+ console.log("callAI raw data:", data);
+return JSON.stringify(data);
+
 
 }
 
