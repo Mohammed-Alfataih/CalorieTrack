@@ -71,10 +71,12 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       if (Array.isArray(content)) {
         const imageBase64 = content.find((c: any) => c.image_base64)?.image_base64;
-        workerBody = imageBase64 ? { type: "image", image: imageBase64 } : { type: "text", food: "Unknown food from image" };
+       workerBody = imageBase64
+  ? { messages: [{ role: "user", content: [{ image_base64: imageBase64 }] }] }
+  : { messages: [{ role: "user", content: "Unknown food from image" }] };
       } else if (typeof content === 'string') {
         const foodMatch = content.match(/Food:\s*(.+)/)?.[1]?.trim();
-        workerBody = { type: "text", food: foodMatch || content };
+        workerBody = { messages: [{ role: "user", content: foodMatch || content }] };
       } else {
         workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
       }
