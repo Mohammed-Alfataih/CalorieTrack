@@ -1,133 +1,122 @@
-import * as admin from 'firebase-admin';
-import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
+export interface Env {
+  AI: any;
+}
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'caloriestrack'
+function jsonResponse(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+    },
   });
 }
 
-interface UserCredits { count: number; date: string; }
-const userCredits = new Map<string, UserCredits>();
-const DAILY_CREDIT_LIMIT = 1000;
-
-function getUserCredits(userId: string): UserCredits {
-  const today = new Date().toDateString();
-  const key = `${userId}:${today}`;
-  if (!userCredits.has(key)) userCredits.set(key, { count: 0, date: today });
-  return userCredits.get(key)!;
-}
-
-function hasCreditsRemaining(userId: string) {
-  return getUserCredits(userId).count < DAILY_CREDIT_LIMIT;
-}
-
-function incrementCredits(userId: string) {
-  const credits = getUserCredits(userId);
-  credits.count += 1;
-  userCredits.set(`${userId}:${credits.date}`, credits);
-}
-
-function getRemainingCredits(userId: string) {
-  return DAILY_CREDIT_LIMIT - getUserCredits(userId).count;
-}
-
-async function verifyAuth(authHeader?: string) {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) throw new Error('No authentication token provided');
-  const token = authHeader.split('Bearer ')[1];
-  const decoded = await admin.auth().verifyIdToken(token);
-  return { userId: decoded.uid, email: decoded.email || '' };
-}
-
-export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
-
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-
-  try {
-    const { userId, email } = await verifyAuth(event.headers.authorization);
-
-    if (!hasCreditsRemaining(userId)) {
-      return {
-        statusCode: 429,
-        headers,
-        body: JSON.stringify({ error: 'Daily AI credit limit reached' })
-      };
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+        },
+      });
     }
 
-    const requestBody = JSON.parse(event.body || '{}');
-    const cloudflareWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || 'https://calorie-ai.calorietrack.workers.dev';
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
 
-    // Transform messages → worker expected format
-    let workerBody: any;
-    if (requestBody.messages && requestBody.messages.length > 0) {
-      const lastMessage = requestBody.messages[requestBody.messages.length - 1];
+    try {
+      const body = await request.json();
+      const messages = body.messages;
+
+      if (!messages || !Array.isArray(messages)) {
+        return jsonResponse({ error: "Invalid request format" }, 400);
+      }
+
+      const lastMessage = messages[messages.length - 1];
       const content = lastMessage?.content;
 
+      let foodDescription = "";
+
+      // Image scan
       if (Array.isArray(content)) {
-        const imageBase64 = content.find((c: any) => c.image_base64)?.image_base64;
-       workerBody = imageBase64
-  ? { messages: [{ role: "user", content: [{ image_base64: imageBase64 }] }] }
-  : { messages: [{ role: "user", content: "Unknown food from image" }] };
-      } else if (typeof content === 'string') {
-        const foodMatch = content.match(/Food:\s*(.+)/)?.[1]?.trim();
-        workerBody = { messages: [{ role: "user", content: foodMatch || content }] };
+        const imagePart = content.find((c: any) => c.image_base64);
+        if (!imagePart) return jsonResponse({ error: "No image provided" }, 400);
+
+        // Use AI to describe the image first
+        const visionResult = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
+          image: [...Uint8Array.from(atob(imagePart.image_base64), c => c.charCodeAt(0))],
+          prompt: "What food is in this image? List all visible foods with approximate portion sizes.",
+          max_tokens: 256,
+        });
+
+        foodDescription = visionResult?.description || visionResult?.response || "unknown food";
+      } else if (typeof content === "string") {
+        foodDescription = content;
       } else {
-        workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
+        return jsonResponse({ error: "Unsupported content type" }, 400);
       }
-    } else if (requestBody.type) {
-      workerBody = requestBody;
-    } else {
-      workerBody = { type: "text", food: requestBody.foodName || "Unknown" };
+
+      // Step 1: Estimate calories
+      const calorieResult = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional nutritionist. Given a food item, respond with ONLY valid JSON — no markdown, no explanation. Format:
+{"foodName":"<english name>","calories":<number>,"confidence":"<low|medium|high>","breakdown":{"protein":<g>,"carbs":<g>,"fat":<g>}}
+Rules:
+- calories must be a realistic non-zero number (unless it's water/zero-cal drinks)
+- Use standard serving sizes if not specified
+- confidence: high if common food, medium if ambiguous, low if unclear`
+          },
+          { role: "user", content: `Estimate calories for: ${foodDescription}` }
+        ],
+        max_tokens: 200,
+      });
+
+      let parsed: any;
+      try {
+        const raw = calorieResult?.response || "";
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      } catch {
+        parsed = null;
+      }
+
+      if (!parsed || !parsed.foodName) {
+        parsed = { foodName: foodDescription, calories: 0, confidence: "low", breakdown: null };
+      }
+
+      // Step 2: Translate to Arabic
+      const translateResult = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [
+          {
+            role: "system",
+            content: "Translate the following food name to Arabic. Reply with ONLY the Arabic translation, nothing else."
+          },
+          { role: "user", content: parsed.foodName }
+        ],
+        max_tokens: 50,
+      });
+
+      const foodNameAr = translateResult?.response?.trim() || parsed.foodName;
+
+      return jsonResponse({
+        foodName: parsed.foodName,
+        foodNameAr,
+        calories: parsed.calories || 0,
+        confidence: parsed.confidence || "medium",
+        breakdown: parsed.breakdown || null,
+      });
+
+    } catch (err: any) {
+      console.error("Worker error:", err);
+      return jsonResponse({ error: err.message || "Server error" }, 500);
     }
-
-    const response = await fetch(cloudflareWorkerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(workerBody),
-    });
-
-    // ✅ FIX: Always parse JSON safely
-    let data: any;
-    try {
-      data = await response.json();
-    } catch {
-      data = { foodName: workerBody.food || "Unknown", foodNameAr: workerBody.food || "Unknown", calories: 0 };
-    }
-
-    incrementCredits(userId);
-    const newRemaining = getRemainingCredits(userId);
-
-    return {
-      statusCode: 200,
-      headers: {
-        ...headers,
-        'X-Credits-Remaining': String(newRemaining),
-        'X-Credits-Used': String(getUserCredits(userId).count),
-        'X-Credits-Limit': String(DAILY_CREDIT_LIMIT),
-      },
-      body: JSON.stringify({
-        foodName: data.foodName || workerBody.food || "Unknown",
-        foodNameAr: data.foodNameAr || workerBody.food || "Unknown",
-        calories: data.calories || 0,
-        confidence: data.confidence || "medium",
-        breakdown: data.breakdown || null,
-        text: "", // remove "No additional info" to prevent frontend warnings
-        creditsUsed: getUserCredits(userId).count,
-        creditsRemaining: newRemaining
-      })
-    };
-
-  } catch (error) {
-    return {
-      statusCode: (error as Error).message.includes('authentication') ? 401 : 500,
-      headers,
-      body: JSON.stringify({ error: (error as Error).message || 'Internal server error' })
-    };
-  }
+  },
 };
