@@ -1,5 +1,9 @@
+export interface Env {
+  AI: any;
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     try {
       if (request.method !== "POST") {
         return jsonResponse({ error: "Method not allowed" }, 405);
@@ -32,14 +36,21 @@ export default {
       }
 
       // Detect text estimate
-      if (typeof content === "string") {
-        return jsonResponse({
-          foodName: content,
-          foodNameAr: content,
-          calories: 200,
-        });
-      }
+      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+  messages: [
+    {
+      role: "system",
+      content: "Return ONLY JSON: {\"foodName\":\"string\",\"foodNameAr\":\"string\",\"calories\":number}"
+    },
+    {
+      role: "user",
+      content: `Estimate calories for: ${content}`
+    }
+  ],
+  max_tokens: 200,
+});
 
+return jsonResponse(JSON.parse(result.response));
       return jsonResponse({ error: "Unsupported content type" }, 400);
 
     } catch (err: any) {
