@@ -12,7 +12,7 @@ export async function getUserCredits() {
   const token = await user.getIdToken();
 
   try {
-    const res = await fetch("/.netlify/functions/cloudflare", {
+    const res = await fetch("https://calorietrack.calorietrack.workers.dev", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -51,7 +51,7 @@ export async function callAI(messages) {
 
   const token = await user.getIdToken();
 
-  const res = await fetch("/.netlify/functions/cloudflare", {
+  const res = await fetch("https://calorietrack.calorietrack.workers.dev", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
