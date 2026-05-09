@@ -1,5 +1,5 @@
 name = "calorie-ai"
-main = "src/worker.ts"
+main = "src/worker.js"
 compatibility_date = "2024-09-23"
 
 [ai]
