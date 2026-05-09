@@ -16,19 +16,19 @@ export async function getUserCredits() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ messages: [] }), // empty messages just to fetch credits
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "user",
+            content: "credits",
+          },
+        ],
+      }),
     });
 
-    // ✅ Safe JSON parsing
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      const text = await res.text();
-      data = { text };
-    }
+    const data = await res.json().catch(() => ({}));
 
     return {
       credits: data.creditsUsed ?? 0,
@@ -41,7 +41,7 @@ export async function getUserCredits() {
 }
 
 /**
- * Call Cloudflare AI Worker via Netlify function
+ * Call AI backend
  */
 export async function callAI(messages) {
   const auth = getAuth();
@@ -55,28 +55,42 @@ export async function callAI(messages) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({
+      messages: messages.map((m) => {
+        // FIX: ensure content is only string OR image_base64 array
+        if (Array.isArray(m.content)) {
+          return {
+            role: m.role,
+            content: m.content.map((c) => {
+              if (c.image_base64) {
+                return { image_base64: c.image_base64 };
+              }
+              return c;
+            }),
+          };
+        }
+
+        return {
+          role: m.role,
+          content: m.content,
+        };
+      }),
+    }),
   });
 
-  // ✅ Safe JSON parsing: try JSON, fallback to text
-  let data;
-  try {
-    data = await res.json();
-  } catch {
+  const data = await res.json().catch(async () => {
     const text = await res.text();
-    data = { text };
-  }
+    return { error: text };
+  });
 
   if (!res.ok) {
     throw new Error(data.error || "AI request failed");
   }
 
- console.log("callAI raw data:", data);
-return JSON.stringify(data);
-
-
+  console.log("callAI:", data);
+  return data;
 }
 
 /**
@@ -85,25 +99,23 @@ return JSON.stringify(data);
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onload = () =>
+      resolve(reader.result.split(",")[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
 /**
- * Build scan prompt for image
+ * IMAGE PROMPT (FIXED)
  */
 export function buildScanPrompt(base64) {
   return [
     {
       role: "user",
       content: [
-        { type: "input_image", image_base64: base64 },
         {
-          type: "input_text",
-          text: `Return ONLY valid JSON:
-{"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}`,
+          image_base64: base64,
         },
       ],
     },
@@ -111,15 +123,13 @@ export function buildScanPrompt(base64) {
 }
 
 /**
- * Build estimate prompt for text
+ * TEXT PROMPT (FIXED)
  */
 export function buildEstimatePrompt(foodName) {
   return [
     {
       role: "user",
-      content: `Return ONLY valid JSON:
-{"foodName":"English name","foodNameAr":"اسم الطعام بالعربي","calories":number}
-Food: ${foodName}`,
+      content: foodName,
     },
   ];
 }
