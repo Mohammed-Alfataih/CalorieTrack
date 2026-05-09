@@ -1,6 +1,6 @@
 import { getAuth } from "firebase/auth";
 
-const BASE_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+const BASE_URL = process.env.REACT_APP_CLOUDFLARE_WORKER_URL;
 console.log("BASE_URL =", BASE_URL);
 // Safety check
 if (!BASE_URL) {
