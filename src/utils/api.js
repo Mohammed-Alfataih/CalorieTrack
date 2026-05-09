@@ -1,7 +1,14 @@
 import { getAuth } from "firebase/auth";
 
+const BASE_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+
+// Safety check
+if (!BASE_URL) {
+  console.error("❌ Missing VITE_CLOUDFLARE_WORKER_URL in .env");
+}
+
 /**
- * Get user credits from Cloudflare function
+ * Get user credits (ONLY if backend supports it)
  */
 export async function getUserCredits() {
   const auth = getAuth();
@@ -12,19 +19,14 @@ export async function getUserCredits() {
   const token = await user.getIdToken();
 
   try {
-    const res = await fetch("/.netlify/functions/cloudflare", {
+    const res = await fetch(BASE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        messages: [
-          {
-            role: "user",
-            content: "credits",
-          },
-        ],
+        type: "credits",
       }),
     });
 
@@ -41,7 +43,7 @@ export async function getUserCredits() {
 }
 
 /**
- * Call AI backend
+ * Call AI backend (Cloudflare Worker ONLY)
  */
 export async function callAI(messages) {
   const auth = getAuth();
@@ -51,33 +53,13 @@ export async function callAI(messages) {
 
   const token = await user.getIdToken();
 
-  const res = await fetch("/.netlify/functions/cloudflare", {
+  const res = await fetch(BASE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      messages: messages.map((m) => {
-        // FIX: ensure content is only string OR image_base64 array
-        if (Array.isArray(m.content)) {
-          return {
-            role: m.role,
-            content: m.content.map((c) => {
-              if (c.image_base64) {
-                return { image_base64: c.image_base64 };
-              }
-              return c;
-            }),
-          };
-        }
-
-        return {
-          role: m.role,
-          content: m.content,
-        };
-      }),
-    }),
+    body: JSON.stringify({ messages }),
   });
 
   const data = await res.json().catch(async () => {
@@ -89,7 +71,6 @@ export async function callAI(messages) {
     throw new Error(data.error || "AI request failed");
   }
 
-  console.log("callAI:", data);
   return data;
 }
 
